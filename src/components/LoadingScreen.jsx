@@ -1,42 +1,66 @@
 import { useEffect, useState } from 'react'
+import { getJobStatus } from '../api/client.js'
 
-const STEPS = [
-  'Preparing the selected region…',
-  'Simulating satellite image fetch…',
-  'Running enhancement pipeline…',
-  'Building comparison view…',
-]
+const STATUS_MESSAGES = {
+  QUEUED: 'Preparing your request...',
+  SEARCHING_IMAGERY: 'Finding suitable satellite imagery...',
+  DOWNLOADING_IMAGERY: 'Downloading satellite imagery...',
+  PREPARING_INPUT: 'Preparing imagery...',
+  ENHANCING: 'Enhancing satellite imagery...',
+  GENERATING_PREVIEW: 'Preparing result...',
+  COMPLETED: 'Complete',
+  FAILED: 'Processing failed'
+}
 
-export default function LoadingScreen({ onDone }) {
-  const [stepIndex, setStepIndex] = useState(0)
-  const [progress, setProgress] = useState(8)
+export default function LoadingScreen({ jobId, onDone, onError }) {
+  const [message, setMessage] = useState('Initializing...')
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
-    const stepTimer = setInterval(() => {
-      setStepIndex((current) => Math.min(current + 1, STEPS.length - 1))
-    }, 900)
+    if (!jobId) return
+    
+    let isMounted = true
+    let timerId
+    let fakeProgress = 5
 
-    const progressTimer = setInterval(() => {
-      setProgress((current) => Math.min(current + 6, 100))
-    }, 180)
+    const poll = async () => {
+      try {
+        const job = await getJobStatus(jobId)
+        if (!isMounted) return
 
-    const doneTimer = setTimeout(() => {
-      onDone()
-    }, 3800)
+        setMessage(STATUS_MESSAGES[job.status] || `Status: ${job.status}`)
+        fakeProgress = Math.min(fakeProgress + 10, 95)
+        setProgress(job.status === 'COMPLETED' ? 100 : fakeProgress)
+
+        if (job.status === 'COMPLETED') {
+          setTimeout(() => {
+            if (isMounted) onDone(job.result)
+          }, 500)
+        } else if (job.status === 'FAILED') {
+          onError('Processing failed on the server')
+        } else {
+          timerId = setTimeout(poll, 1000)
+        }
+      } catch (err) {
+        if (!isMounted) return
+        onError(err.message || 'Failed to check status')
+      }
+    }
+
+    poll()
 
     return () => {
-      clearInterval(stepTimer)
-      clearInterval(progressTimer)
-      clearTimeout(doneTimer)
+      isMounted = false
+      clearTimeout(timerId)
     }
-  }, [onDone])
+  }, [jobId, onDone, onError])
 
   return (
     <div className="screen-center">
       <div className="loading-card">
         <div className="spinner" aria-hidden="true" />
         <h1>Enhancing area</h1>
-        <p>{STEPS[stepIndex]}</p>
+        <p>{message}</p>
         <div className="progress-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100}>
           <div className="progress-fill" style={{ width: `${progress}%` }} />
         </div>

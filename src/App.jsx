@@ -4,6 +4,7 @@ import MapView from './components/MapView.jsx'
 import ControlPanel from './components/ControlPanel.jsx'
 import LoadingScreen from './components/LoadingScreen.jsx'
 import ResultScreen from './components/ResultScreen.jsx'
+import { createEnhancementJob } from './api/client.js'
 
 function formatBounds(bounds) {
   if (!bounds) return null
@@ -21,6 +22,8 @@ export default function App() {
   const [selectedBounds, setSelectedBounds] = useState(null)
   const [locationTarget, setLocationTarget] = useState(null)
   const [locationLabel, setLocationLabel] = useState('')
+  const [activeJobId, setActiveJobId] = useState(null)
+  const [errorMsg, setErrorMsg] = useState(null)
 
   const handleSearchSelect = useCallback((place) => {
     setLocationTarget({
@@ -33,19 +36,56 @@ export default function App() {
 
   const handleBoundsChange = useCallback((bounds) => {
     setSelectedBounds(bounds)
+    setErrorMsg(null)
   }, [])
 
   const handleDrawFinish = useCallback(() => {
     setSelectMode(false)
   }, [])
 
-  const handleEnhance = () => {
-    if (!selectedBounds) return
-    setView('loading')
+  const handleEnhance = async () => {
+    if (!selectedBounds) {
+      setErrorMsg('Please select an area on the map first.')
+      return
+    }
+    
+    setErrorMsg(null)
+
+    const north = selectedBounds.getNorth()
+    const south = selectedBounds.getSouth()
+    const east = selectedBounds.getEast()
+    const west = selectedBounds.getWest()
+
+    const geometry = {
+      type: 'Polygon',
+      coordinates: [[
+        [west, north],
+        [west, south],
+        [east, south],
+        [east, north],
+        [west, north]
+      ]]
+    }
+
+    try {
+      setView('loading')
+      const job = await createEnhancementJob(geometry)
+      setActiveJobId(job.jobId)
+    } catch (err) {
+      setErrorMsg(`Failed to start job: ${err.message}`)
+      setView('dashboard')
+    }
   }
 
-  const handleProcessingDone = useCallback(() => {
+  const handleProcessingDone = useCallback((result) => {
     setView('results')
+    setActiveJobId(null)
+  }, [])
+
+  const handleProcessingError = useCallback((message) => {
+    setErrorMsg(message)
+    setView('dashboard')
+    setActiveJobId(null)
   }, [])
 
   const handleBackToMap = () => {
@@ -59,7 +99,7 @@ export default function App() {
   }
 
   if (view === 'loading') {
-    return <LoadingScreen onDone={handleProcessingDone} />
+    return <LoadingScreen jobId={activeJobId} onDone={handleProcessingDone} onError={handleProcessingError} />
   }
 
   if (view === 'results') {
@@ -76,6 +116,11 @@ export default function App() {
   return (
     <div className="app-shell">
       <Header />
+      {errorMsg && (
+        <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '1rem', textAlign: 'center', borderBottom: '1px solid #fecaca' }}>
+          <strong>Error:</strong> {errorMsg}
+        </div>
+      )}
       <div className="workspace">
         <ControlPanel
           selectMode={selectMode}
@@ -87,6 +132,7 @@ export default function App() {
           onClearSelection={() => {
             setSelectedBounds(null)
             setSelectMode(false)
+            setErrorMsg(null)
           }}
         />
         <MapView

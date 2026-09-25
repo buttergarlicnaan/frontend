@@ -10,7 +10,14 @@ async function apiRequest(path, options = {}) {
   })
 
   if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`)
+    let errorMsg = `Request failed (${response.status})`
+    try {
+      const data = await response.json()
+      if (data.error) errorMsg = data.error
+    } catch (e) {
+      // ignore
+    }
+    throw new Error(errorMsg)
   }
 
   return response.json()
@@ -18,6 +25,17 @@ async function apiRequest(path, options = {}) {
 
 export function getHealth() {
   return apiRequest('/api/health')
+}
+
+export function createEnhancementJob(geometry) {
+  return apiRequest('/api/enhance', {
+    method: 'POST',
+    body: JSON.stringify({ geometry }),
+  })
+}
+
+export function getJobStatus(jobId) {
+  return apiRequest(`/api/jobs/${jobId}`)
 }
 
 export { API_BASE_URL, apiRequest }
