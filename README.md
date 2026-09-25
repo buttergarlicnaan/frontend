@@ -1,16 +1,47 @@
-# React + Vite
+# GeoEnhance Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Interactive map dashboard for the GeoEnhance SIH project.
 
-Currently, two official plugins are available:
+This app lets you search a location, draw a rectangle on the map, and walk through a simulated enhancement flow. Copernicus satellite fetch and the ML model are not connected yet.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Stack
 
-## React Compiler
+- React
+- Vite
+- JavaScript
+- Leaflet
+- React-Leaflet
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+The frontend is a separate repository from the backend. Do not mix the two.
 
-## Expanding the Oxlint configuration
+## Run locally
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```bash
+npm install
+npm run dev
+```
+
+The app starts at `http://localhost:5173`.
+
+The backend (Express) is expected at `http://localhost:8000`. Copy `.env.example` to `.env` if you need a different API origin:
+
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+Frontend environment variables are public at build time. Never put secrets here.
+
+## Scripts
+
+```bash
+npm run dev      # local development
+npm run build    # production build
+npm run preview  # preview the production build
+npm run lint     # Oxlint
+```
+
+## API access
+
+All backend HTTP calls go through `src/api/client.js`. Do not hardcode backend URLs in components.
+
+The enhancement API is not implemented yet.
