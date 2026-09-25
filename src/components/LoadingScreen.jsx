@@ -9,6 +9,7 @@ const STATUS_MESSAGES = {
   ENHANCING: 'Enhancing satellite imagery...',
   GENERATING_PREVIEW: 'Preparing result...',
   COMPLETED: 'Complete',
+  TIFFS_RETRIEVED: 'Raster data retrieved',
   FAILED: 'Processing failed'
 }
 
@@ -30,14 +31,15 @@ export default function LoadingScreen({ jobId, onDone, onError }) {
 
         setMessage(STATUS_MESSAGES[job.status] || `Status: ${job.status}`)
         fakeProgress = Math.min(fakeProgress + 10, 95)
-        setProgress(job.status === 'COMPLETED' ? 100 : fakeProgress)
+        const isFinished = job.status === 'COMPLETED' || job.status === 'TIFFS_RETRIEVED';
+        setProgress(isFinished ? 100 : fakeProgress)
 
-        if (job.status === 'COMPLETED') {
+        if (isFinished) {
           setTimeout(() => {
             if (isMounted) onDone(job.result)
           }, 500)
         } else if (job.status === 'FAILED') {
-          onError('Processing failed on the server')
+          onError(job.warning || 'Processing failed on the server')
         } else {
           timerId = setTimeout(poll, 1000)
         }
