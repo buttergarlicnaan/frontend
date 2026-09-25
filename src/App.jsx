@@ -25,6 +25,12 @@ export default function App() {
   const [activeJobId, setActiveJobId] = useState(null)
   const [errorMsg, setErrorMsg] = useState(null)
 
+  const thirtyDaysAgo = new Date()
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+  const [startDate, setStartDate] = useState(thirtyDaysAgo.toISOString().split('T')[0])
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0])
+  const [maxCloudCover, setMaxCloudCover] = useState(20)
+
   const handleSearchSelect = useCallback((place) => {
     setLocationTarget({
       lat: Number(place.lat),
@@ -69,7 +75,13 @@ export default function App() {
 
     try {
       setView('loading')
-      const job = await createEnhancementJob(geometry)
+      const payload = {
+        geometry,
+        startDate,
+        endDate,
+        maxCloudCover
+      }
+      const job = await createEnhancementJob(payload)
       setActiveJobId(job.jobId)
     } catch (err) {
       setErrorMsg(`Failed to start job: ${err.message}`)
@@ -126,6 +138,12 @@ export default function App() {
           selectMode={selectMode}
           selectedBounds={formatBounds(selectedBounds)}
           locationLabel={locationLabel}
+          startDate={startDate}
+          endDate={endDate}
+          maxCloudCover={maxCloudCover}
+          onStartDateChange={(e) => setStartDate(e.target.value)}
+          onEndDateChange={(e) => setEndDate(e.target.value)}
+          onMaxCloudCoverChange={(e) => setMaxCloudCover(Number(e.target.value))}
           onSearchSelect={handleSearchSelect}
           onToggleSelectMode={() => setSelectMode((value) => !value)}
           onEnhance={handleEnhance}

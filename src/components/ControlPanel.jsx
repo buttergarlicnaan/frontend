@@ -4,6 +4,12 @@ export default function ControlPanel({
   selectMode,
   selectedBounds,
   locationLabel,
+  startDate,
+  endDate,
+  maxCloudCover,
+  onStartDateChange,
+  onEndDateChange,
+  onMaxCloudCoverChange,
   onSearchSelect,
   onToggleSelectMode,
   onEnhance,
@@ -18,6 +24,24 @@ export default function ControlPanel({
           <strong>Centered on:</strong> {locationLabel}
         </p>
       )}
+
+      <div className="panel-section">
+        <h2>Search Parameters</h2>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>Start Date</label>
+          <input type="date" value={startDate} onChange={onStartDateChange} style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }} />
+        </div>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>End Date</label>
+          <input type="date" value={endDate} onChange={onEndDateChange} style={{ width: '100%', padding: '0.5rem', borderRadius: '4px', border: '1px solid #ccc' }} />
+        </div>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={{ display: 'block', fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+            Max Cloud Cover: {maxCloudCover}%
+          </label>
+          <input type="range" min="0" max="100" step="5" value={maxCloudCover} onChange={onMaxCloudCoverChange} style={{ width: '100%' }} />
+        </div>
+      </div>
 
       <div className="panel-section">
         <h2>Area selection</h2>
