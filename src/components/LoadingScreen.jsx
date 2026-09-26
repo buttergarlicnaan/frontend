@@ -10,6 +10,8 @@ const STATUS_MESSAGES = {
   GENERATING_PREVIEW: 'Preparing result...',
   COMPLETED: 'Complete',
   TIFFS_RETRIEVED: 'Raster data retrieved',
+  UPLOADING_INPUTS: 'Uploading to cloud storage...',
+  INPUTS_UPLOADED: 'Ready for processing',
   FAILED: 'Processing failed'
 }
 
@@ -31,7 +33,7 @@ export default function LoadingScreen({ jobId, onDone, onError }) {
 
         setMessage(STATUS_MESSAGES[job.status] || `Status: ${job.status}`)
         fakeProgress = Math.min(fakeProgress + 10, 95)
-        const isFinished = job.status === 'COMPLETED' || job.status === 'TIFFS_RETRIEVED';
+        const isFinished = job.status === 'COMPLETED' || job.status === 'INPUTS_UPLOADED';
         setProgress(isFinished ? 100 : fakeProgress)
 
         if (isFinished) {
