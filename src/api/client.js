@@ -89,4 +89,9 @@ export function connectJobWebSocket(jobId, callbacks = {}) {
   }
 }
 
+export function jobAssetUrl(jobId, filename) {
+  if (!jobId || !filename) return ''
+  return `${API_BASE_URL}/api/jobs/${jobId}/files/${encodeURIComponent(filename)}`
+}
+
 export { API_BASE_URL, WS_BASE_URL, apiRequest }

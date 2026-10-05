@@ -34,12 +34,25 @@ export default function ResultScreen({ jobData, bounds, locationLabel, onBack, o
   const leftContainerRef = useRef(null)
   const leftMapRef = useRef(null)
 
-  const temporalFrames = jobData?.temporalFrames || Array.from({ length: 8 }, (_, i) => ({
+  const jobId = jobData?.jobId
+  const result = jobData?.result || {}
+  // Use signed URLs from the backend result directly
+  const previewRgbUrl   = result.previewRgbUrl   || ''
+  const hrPsUrl         = result.hrPsUrl         || ''
+  const uncertaintyUrl  = result.uncertaintyUrl  || ''
+  const uncertaintyPngUrl = result.rawBaselineUrl || ''
+
+  const temporalFrames = (jobData?.temporalFrames?.length ? jobData.temporalFrames : Array.from({ length: 8 }, (_, i) => ({
     frameIndex: i + 1,
-    timestamp: `2024-03-${String(10 + i * 3).padStart(2, '0')} 10:24 UTC`,
-    cloudCover: (i * 2.1).toFixed(1),
+    timestamp: `Frame ${i + 1}`,
+    cloudCover: null,
     previewUrl: ''
+  }))).map((frame) => ({
+    ...frame,
+    previewUrl: frame.previewUrl || ''
   }))
+
+  const activeFrame = temporalFrames.find((f) => f.frameIndex === activeFrameIndex) || temporalFrames[0]
 
   const centerLon = bounds ? (Number(bounds.east) + Number(bounds.west)) / 2 : 78.96
   const centerLat = bounds ? (Number(bounds.north) + Number(bounds.south)) / 2 : 20.59
@@ -57,6 +70,11 @@ export default function ResultScreen({ jobData, bounds, locationLabel, onBack, o
       bearing: 0,
       attributionControl: false
     })
+
+    leftMap.on('load', () => {
+      leftMap.resize()
+    })
+    setTimeout(() => leftMap.resize(), 200)
 
     leftMapRef.current = leftMap
 
@@ -91,7 +109,7 @@ export default function ResultScreen({ jobData, bounds, locationLabel, onBack, o
   }, [])
 
   const handleDownload = () => {
-    const downloadUrl = jobData?.result?.hrPsUrl || '#'
+    const downloadUrl = hrPsUrl || '#'
     if (downloadUrl && downloadUrl !== '#') {
       window.open(downloadUrl, '_blank')
     } else {
@@ -166,6 +184,20 @@ export default function ResultScreen({ jobData, bounds, locationLabel, onBack, o
           style={{ clipPath: `polygon(0 0, ${splitRatio * 100}% 0, ${splitRatio * 100}% 100%, 0 100%)` }}
         >
           <div ref={leftContainerRef} style={{ width: '100%', height: '100%' }} />
+          {activeFrame?.previewUrl && (
+            <img
+              src={activeFrame.previewUrl}
+              alt={`Sentinel-2 frame ${activeFrame.frameIndex}`}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                zIndex: 2,
+              }}
+            />
+          )}
           <div style={{ position: 'absolute', bottom: '110px', left: '24px', zIndex: 10, background: 'rgba(15,18,26,0.85)', padding: '5px 12px', borderRadius: '6px', border: 'var(--glass-border)', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
             RAW SENTINEL-2 BASELINE (10m)
           </div>
@@ -178,8 +210,10 @@ export default function ResultScreen({ jobData, bounds, locationLabel, onBack, o
         >
           <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
             <WebGLShaderView
-              hrPsUrl={jobData?.result?.hrPsUrl}
-              uncertaintyUrl={jobData?.result?.uncertaintyUrl}
+              hrPsUrl={hrPsUrl}
+              uncertaintyUrl={uncertaintyUrl}
+              previewRgbUrl={previewRgbUrl}
+              uncertaintyPngUrl={uncertaintyPngUrl}
               mode={shaderMode}
             />
           </div>

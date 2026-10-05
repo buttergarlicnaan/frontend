@@ -35,11 +35,18 @@ export default function LoadingScreen({ jobId, onDone, onError }) {
         if (!isMounted) return
         setProgress(pct)
       },
-      onComplete: (result) => {
+      onComplete: async () => {
         if (!isMounted) return
         setProgress(100)
         addLog('Super-resolution inference complete.', true)
-        setTimeout(() => onDone(result), 600)
+        try {
+          const job = await getJobStatus(jobId)
+          setTimeout(() => {
+            if (isMounted) onDone(job)
+          }, 600)
+        } catch {
+          // HTTP poller will finish the job
+        }
       },
       onError: () => {
         // Fallback silently to HTTP polling
@@ -61,10 +68,13 @@ export default function LoadingScreen({ jobId, onDone, onError }) {
         } else if (job.status === 'UPLOADING_INPUTS') {
           setProgress((p) => Math.max(p, 65))
           addLog('Staging multi-temporal inputs to Supabase Cloud Storage...')
+        } else if (job.status === 'INPUTS_UPLOADED') {
+          setProgress((p) => Math.max(p, 75))
+          addLog('Inputs staged. Waiting for super-resolution output...')
         } else if (job.status === 'INFERENCE_PROCESSING') {
           setProgress((p) => Math.max(p, 80))
           addLog('Executing PyTorch Multi-Temporal Super-Resolution model...', true)
-        } else if (job.status === 'COMPLETED' || job.status === 'INPUTS_UPLOADED') {
+        } else if (job.status === 'COMPLETED') {
           setProgress(100)
           addLog('Processing complete. Finalizing output rasters.')
           setTimeout(() => {

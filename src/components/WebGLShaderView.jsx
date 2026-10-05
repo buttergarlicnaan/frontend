@@ -139,16 +139,19 @@ function generateSyntheticRaster(width, height) {
   return { rasterData: data, uncData, width, height }
 }
 
-export default function WebGLShaderView({ hrPsUrl, uncertaintyUrl, mode = 'rgb' }) {
+export default function WebGLShaderView({ hrPsUrl, uncertaintyUrl, previewRgbUrl, uncertaintyPngUrl, mode = 'rgb' }) {
   const canvasRef = useRef(null)
   const glRef = useRef(null)
   const programRef = useRef(null)
   const modeLocationRef = useRef(null)
   const [loading, setLoading] = useState(false)
+  const [rasterReady, setRasterReady] = useState(false)
 
   // Map mode string to integer uniform
   const modeMap = { rgb: 0, cir: 1, ndvi: 2, uncertainty: 3 }
   const modeInt = modeMap[mode] ?? 0
+  const needsGpuRaster = mode === 'cir' || mode === 'ndvi' || mode === 'uncertainty'
+  const fallbackImageUrl = mode === 'uncertainty' ? (uncertaintyPngUrl || previewRgbUrl) : previewRgbUrl
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -204,7 +207,7 @@ export default function WebGLShaderView({ hrPsUrl, uncertaintyUrl, mode = 'rgb' 
       let rgbaBytes = null
       let uncBytes = null
 
-      if (hrPsUrl && hrPsUrl.endsWith('.tif')) {
+      if (hrPsUrl && (hrPsUrl.includes('.tif') || hrPsUrl.includes('.tiff'))) {
         try {
           const tiff = await fromUrl(hrPsUrl)
           const image = await tiff.getImage()
@@ -213,30 +216,69 @@ export default function WebGLShaderView({ hrPsUrl, uncertaintyUrl, mode = 'rgb' 
           const rasters = await image.readRasters()
 
           if (rasters.length >= 4) {
-            rgbaBytes = new Uint8Array(width * height * 4)
             const rChan = rasters[0]
             const gChan = rasters[1]
             const bChan = rasters[2]
             const nirChan = rasters[3]
 
+            // 2-98 percentile contrast stretch — satellite float32 reflectance (0.0→0.35)
+            // renders as black without stretching
+            function stretchCh(arr) {
+              const sample = []
+              const step = Math.max(1, Math.floor(arr.length / 5000))
+              for (let i = 0; i < arr.length; i += step) {
+                const v = arr[i]
+                if (isFinite(v) && v > -1 && v < 10) sample.push(v)
+              }
+              sample.sort((a, b) => a - b)
+              const lo = sample[Math.floor(sample.length * 0.02)] ?? 0
+              const hi = sample[Math.floor(sample.length * 0.98)] ?? 1
+              return { lo, range: Math.max(hi - lo, 1e-6) }
+            }
+
+            const rs = stretchCh(rChan), gs = stretchCh(gChan)
+            const bs = stretchCh(bChan), ns = stretchCh(nirChan)
+
+            rgbaBytes = new Uint8Array(width * height * 4)
             for (let i = 0; i < width * height; i++) {
-              rgbaBytes[i * 4] = Math.min(255, Math.floor(rChan[i] * 255))
-              rgbaBytes[i * 4 + 1] = Math.min(255, Math.floor(gChan[i] * 255))
-              rgbaBytes[i * 4 + 2] = Math.min(255, Math.floor(bChan[i] * 255))
-              rgbaBytes[i * 4 + 3] = Math.min(255, Math.floor(nirChan[i] * 255))
+              rgbaBytes[i * 4]     = Math.min(255, Math.max(0, Math.floor((rChan[i]   - rs.lo) / rs.range * 255)))
+              rgbaBytes[i * 4 + 1] = Math.min(255, Math.max(0, Math.floor((gChan[i]   - gs.lo) / gs.range * 255)))
+              rgbaBytes[i * 4 + 2] = Math.min(255, Math.max(0, Math.floor((bChan[i]   - bs.lo) / bs.range * 255)))
+              rgbaBytes[i * 4 + 3] = Math.min(255, Math.max(0, Math.floor((nirChan[i] - ns.lo) / ns.range * 255)))
             }
           }
         } catch (e) {
-          console.warn('Could not parse GeoTIFF from URL; using high-detail multispectral fallback', e)
+          console.error('[GeoTIFF] Failed to load from URL:', hrPsUrl, e)
         }
       }
 
       if (!rgbaBytes) {
-        const syn = generateSyntheticRaster(512, 512)
-        rgbaBytes = syn.rasterData
-        uncBytes = syn.uncData
-        width = syn.width
-        height = syn.height
+        // Do not cover the PNG preview with a fake synthetic raster.
+        setRasterReady(false)
+        setLoading(false)
+        return
+      }
+
+      // Load actual uncertainty TIFF for the heatmap overlay
+      if (uncertaintyUrl && (uncertaintyUrl.includes('.tif') || uncertaintyUrl.includes('.tiff')) && !uncBytes) {
+        try {
+          const uTiff = await fromUrl(uncertaintyUrl)
+          const uImage = await uTiff.getImage()
+          const uRasters = await uImage.readRasters()
+          const uChan = uRasters[0]
+          const sample = []
+          const step = Math.max(1, Math.floor(uChan.length / 3000))
+          for (let i = 0; i < uChan.length; i += step) { if (isFinite(uChan[i])) sample.push(uChan[i]) }
+          sample.sort((a, b) => a - b)
+          const uLo = sample[Math.floor(sample.length * 0.01)] ?? 0
+          const uRange = Math.max((sample[Math.floor(sample.length * 0.99)] ?? 1) - uLo, 1e-9)
+          uncBytes = new Uint8Array(uChan.length)
+          for (let i = 0; i < uChan.length; i++) {
+            uncBytes[i] = Math.min(255, Math.max(0, Math.floor((uChan[i] - uLo) / uRange * 255)))
+          }
+        } catch (e) {
+          console.warn('Could not load uncertainty TIFF', e)
+        }
       }
 
       if (!uncBytes) {
@@ -273,6 +315,7 @@ export default function WebGLShaderView({ hrPsUrl, uncertaintyUrl, mode = 'rgb' 
       // Initial Draw
       gl.uniform1i(modeLocationRef.current, modeInt)
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+      setRasterReady(true)
       setLoading(false)
     }
 
@@ -289,19 +332,40 @@ export default function WebGLShaderView({ hrPsUrl, uncertaintyUrl, mode = 'rgb' 
   }, [modeInt])
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: '#0f1216' }}>
+      {fallbackImageUrl && (
+        <img
+          src={fallbackImageUrl}
+          alt={mode === 'uncertainty' ? 'Uncertainty heatmap' : 'Super-resolved satellite imagery'}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+            zIndex: 0,
+          }}
+        />
+      )}
       <canvas
         ref={canvasRef}
         style={{
+          position: 'absolute',
+          inset: 0,
           width: '100%',
           height: '100%',
           objectFit: 'cover',
-          display: 'block'
+          display: 'block',
+          zIndex: 1,
+          opacity: rasterReady && needsGpuRaster ? 1 : 0,
+          pointerEvents: 'none',
+          transition: 'opacity 0.4s ease',
         }}
       />
-      {loading && (
-        <div style={{ position: 'absolute', top: '16px', left: '16px', background: 'rgba(15,18,26,0.85)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', border: 'var(--glass-border)' }}>
-          Uploading 4-channel raster to GPU...
+      {loading && needsGpuRaster && (
+        <div style={{ position: 'absolute', top: '16px', left: '16px', zIndex: 10, background: 'rgba(15,18,26,0.85)', padding: '4px 10px', borderRadius: '6px', fontSize: '0.72rem', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', border: 'var(--glass-border)' }}>
+          Loading 4-channel raster to GPU...
         </div>
       )}
     </div>
