@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 export default function SearchBar({ onSelect }) {
   const [query, setQuery] = useState('')
@@ -6,6 +6,7 @@ export default function SearchBar({ onSelect }) {
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const containerRef = useRef(null)
 
   useEffect(() => {
     const trimmed = query.trim()
@@ -28,46 +29,68 @@ export default function SearchBar({ onSelect }) {
         setResults(data)
         setIsOpen(true)
       } catch {
-        setError('Could not search right now. Try again.')
+        setError('Location search unavailable')
         setResults([])
       } finally {
         setIsLoading(false)
       }
-    }, 400)
+    }, 350)
 
     return () => clearTimeout(timer)
   }, [query])
 
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
   const handleSelect = (place) => {
-    setQuery(place.display_name)
+    setQuery(place.display_name.split(',')[0])
     setIsOpen(false)
     setResults([])
     onSelect(place)
   }
 
   return (
-    <div className="search-bar">
-      <label htmlFor="location-search">Search location</label>
-      <input
-        id="location-search"
-        type="text"
-        value={query}
-        placeholder="City, landmark, or region"
-        onChange={(event) => setQuery(event.target.value)}
-        onFocus={() => results.length > 0 && setIsOpen(true)}
-      />
-      {isLoading && <p className="search-status">Searching…</p>}
-      {error && <p className="search-status error">{error}</p>}
+    <div className="search-container" ref={containerRef}>
+      <div className="search-input-wrap">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+          <circle cx="11" cy="11" r="8"></circle>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+        </svg>
+        <input
+          type="text"
+          value={query}
+          placeholder="Search city, coordinates, or region..."
+          onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => results.length > 0 && setIsOpen(true)}
+        />
+        {isLoading && (
+          <span style={{ fontSize: '0.70rem', color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>...</span>
+        )}
+      </div>
+
       {isOpen && results.length > 0 && (
-        <ul className="search-results">
+        <div className="search-dropdown">
           {results.map((place) => (
-            <li key={`${place.place_id}`}>
-              <button type="button" onClick={() => handleSelect(place)}>
+            <button
+              key={place.place_id}
+              type="button"
+              className="search-item"
+              onClick={() => handleSelect(place)}
+            >
+              <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{place.display_name.split(',')[0]}</div>
+              <div style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {place.display_name}
-              </button>
-            </li>
+              </div>
+            </button>
           ))}
-        </ul>
+        </div>
       )}
     </div>
   )

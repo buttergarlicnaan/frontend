@@ -20,9 +20,11 @@ export default function App() {
   const [view, setView] = useState('dashboard')
   const [selectMode, setSelectMode] = useState(false)
   const [selectedBounds, setSelectedBounds] = useState(null)
+  const [drawnGeometry, setDrawnGeometry] = useState(null)
   const [locationTarget, setLocationTarget] = useState(null)
   const [locationLabel, setLocationLabel] = useState('')
   const [activeJobId, setActiveJobId] = useState(null)
+  const [completedJob, setCompletedJob] = useState(null)
   const [errorMsg, setErrorMsg] = useState(null)
 
   const thirtyDaysAgo = new Date()
@@ -40,8 +42,9 @@ export default function App() {
     setLocationLabel(place.display_name)
   }, [])
 
-  const handleBoundsChange = useCallback((bounds) => {
+  const handleBoundsChange = useCallback((bounds, geometry) => {
     setSelectedBounds(bounds)
+    if (geometry) setDrawnGeometry(geometry)
     setErrorMsg(null)
   }, [])
 
@@ -54,7 +57,7 @@ export default function App() {
       setErrorMsg('Please select an area on the map first.')
       return
     }
-    
+
     setErrorMsg(null)
 
     const north = selectedBounds.getNorth()
@@ -62,7 +65,7 @@ export default function App() {
     const east = selectedBounds.getEast()
     const west = selectedBounds.getWest()
 
-    const geometry = {
+    const geometry = drawnGeometry || {
       type: 'Polygon',
       coordinates: [[
         [west, north],
@@ -84,12 +87,13 @@ export default function App() {
       const job = await createEnhancementJob(payload)
       setActiveJobId(job.jobId)
     } catch (err) {
-      setErrorMsg(`Failed to start job: ${err.message}`)
+      setErrorMsg(`Failed to start enhancement: ${err.message}`)
       setView('dashboard')
     }
   }
 
-  const handleProcessingDone = useCallback((result) => {
+  const handleProcessingDone = useCallback((job) => {
+    setCompletedJob(job)
     setView('results')
     setActiveJobId(null)
   }, [])
@@ -106,17 +110,25 @@ export default function App() {
 
   const handleNewSelection = () => {
     setSelectedBounds(null)
+    setDrawnGeometry(null)
     setSelectMode(false)
     setView('dashboard')
   }
 
   if (view === 'loading') {
-    return <LoadingScreen jobId={activeJobId} onDone={handleProcessingDone} onError={handleProcessingError} />
+    return (
+      <LoadingScreen
+        jobId={activeJobId}
+        onDone={handleProcessingDone}
+        onError={handleProcessingError}
+      />
+    )
   }
 
   if (view === 'results') {
     return (
       <ResultScreen
+        jobData={completedJob}
         bounds={formatBounds(selectedBounds)}
         locationLabel={locationLabel}
         onBack={handleBackToMap}
@@ -129,38 +141,37 @@ export default function App() {
     <div className="app-shell">
       <Header />
       {errorMsg && (
-        <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '1rem', textAlign: 'center', borderBottom: '1px solid #fecaca' }}>
-          <strong>Error:</strong> {errorMsg}
+        <div style={{ position: 'absolute', top: '20px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, background: 'rgba(239, 68, 68, 0.92)', color: '#ffffff', padding: '8px 18px', borderRadius: '999px', fontSize: '0.82rem', backdropFilter: 'blur(16px)', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+          {errorMsg}
         </div>
       )}
-      <div className="workspace">
-        <ControlPanel
-          selectMode={selectMode}
-          selectedBounds={formatBounds(selectedBounds)}
-          locationLabel={locationLabel}
-          startDate={startDate}
-          endDate={endDate}
-          maxCloudCover={maxCloudCover}
-          onStartDateChange={(e) => setStartDate(e.target.value)}
-          onEndDateChange={(e) => setEndDate(e.target.value)}
-          onMaxCloudCoverChange={(e) => setMaxCloudCover(Number(e.target.value))}
-          onSearchSelect={handleSearchSelect}
-          onToggleSelectMode={() => setSelectMode((value) => !value)}
-          onEnhance={handleEnhance}
-          onClearSelection={() => {
-            setSelectedBounds(null)
-            setSelectMode(false)
-            setErrorMsg(null)
-          }}
-        />
-        <MapView
-          selectMode={selectMode}
-          selectedBounds={selectedBounds}
-          locationTarget={locationTarget}
-          onBoundsChange={handleBoundsChange}
-          onDrawFinish={handleDrawFinish}
-        />
-      </div>
+      <ControlPanel
+        selectMode={selectMode}
+        selectedBounds={formatBounds(selectedBounds)}
+        locationLabel={locationLabel}
+        startDate={startDate}
+        endDate={endDate}
+        maxCloudCover={maxCloudCover}
+        onStartDateChange={(e) => setStartDate(e.target.value)}
+        onEndDateChange={(e) => setEndDate(e.target.value)}
+        onMaxCloudCoverChange={(e) => setMaxCloudCover(Number(e.target.value))}
+        onSearchSelect={handleSearchSelect}
+        onToggleSelectMode={() => setSelectMode((v) => !v)}
+        onEnhance={handleEnhance}
+        onClearSelection={() => {
+          setSelectedBounds(null)
+          setDrawnGeometry(null)
+          setSelectMode(false)
+          setErrorMsg(null)
+        }}
+      />
+      <MapView
+        selectMode={selectMode}
+        selectedBounds={selectedBounds}
+        locationTarget={locationTarget}
+        onBoundsChange={handleBoundsChange}
+        onDrawFinish={handleDrawFinish}
+      />
     </div>
   )
 }
